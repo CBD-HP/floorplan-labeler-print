@@ -10,16 +10,16 @@
 /* Layout: controls rail on the left, live print preview fills the right. Brand: Hyas Point green + orange. */
 :root{
   --bg:#f3f5f4; --panel:#ffffff; --ink:#1f2e2d; --muted:#5d6b69; --line:#d7dedc;
-  --brand:#233d3c; --accent:#f04e23; --accent-ink:#ffffff; --field:#f8faf9;
+  --brand:#233d3c; --accent:#f04e23; --accent-ink:#ffffff; --field:#f8faf9; --ok:#2f7a57; --ok-bg:#eaf4ee;
   --display:"Jost","Futura","Century Gothic",system-ui,sans-serif;
   --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#121a19; --panel:#1a2423; --ink:#e4ecea; --muted:#9aaba8; --line:#2d3b39;
-  --brand:#9cc4bf; --accent:#ff6a42; --accent-ink:#1a0d08; --field:#141d1c; color-scheme:dark}}
+  --brand:#9cc4bf; --accent:#ff6a42; --accent-ink:#1a0d08; --field:#141d1c; --ok:#79d3a5; --ok-bg:#16291f; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121a19; --panel:#1a2423; --ink:#e4ecea; --muted:#9aaba8; --line:#2d3b39;
-  --brand:#9cc4bf; --accent:#ff6a42; --accent-ink:#1a0d08; --field:#141d1c; color-scheme:dark}
+  --brand:#9cc4bf; --accent:#ff6a42; --accent-ink:#1a0d08; --field:#141d1c; --ok:#79d3a5; --ok-bg:#16291f; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--body)}
@@ -36,6 +36,12 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .hint{font-size:12px;color:var(--muted);margin:0}
 .drops{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .drops .drop{padding:16px 10px}
+.drop.done{border-style:solid;border-color:var(--ok);background:var(--ok-bg);color:var(--ink)}
+.drop.done .step{color:var(--ok)}
+.drop .names{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:4px}
+.drop.pop{animation:pop .5s ease}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.drop.pop{animation:none}}
 .step{display:block;font:500 11px/1.4 var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
 .warn{color:var(--accent);font-weight:600}
 .link{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:12px;cursor:pointer;text-decoration:underline}
@@ -343,7 +349,34 @@ const nameOpts = () => ({ upper: STYLE.upper, underscores: STYLE.underscores });
 function buildingOptions() {
   return '<option value="">No building</option>' + Object.keys(BUILDINGS).map(b => `<option value="${b}">${b}</option>`).join("");
 }
+// upload boxes turn green and list what's been added
+const DROP_TEXT = {
+  drop2d: ["Step 1", "Add 2D floor plan", "2D added"],
+  drop3d: ["Step 2", "Add 3D floor plan", "3D added"],
+};
+let lastCounts = { drop2d: 0, drop3d: 0 };
+function updateDrops() {
+  const real = files.filter(f => !f.sample);
+  const lists = { drop2d: real.map(f => f.name), drop3d: real.filter(f => f.extra).map(f => f.extra.name) };
+  for (const id of ["drop2d", "drop3d"]) {
+    const box = $(id), [step, empty, done] = DROP_TEXT[id], names = lists[id];
+    box.classList.toggle("done", names.length > 0);
+    box.innerHTML = "";
+    const s = document.createElement("span"); s.className = "step"; s.textContent = names.length ? step + "  \u2713" : step;
+    const b = document.createElement("strong"); b.textContent = names.length ? `${done} (${names.length})` : empty;
+    box.append(s, b);
+    if (names.length) {
+      const n = document.createElement("span"); n.className = "names";
+      n.textContent = names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+      const more = document.createElement("span"); more.className = "names"; more.textContent = "Click or drop to add more";
+      box.append(n, more);
+    } else box.append(document.createElement("br"), "Drop or click");
+    if (names.length > lastCounts[id]) { box.classList.remove("pop"); void box.offsetWidth; box.classList.add("pop"); }
+    lastCounts[id] = names.length;
+  }
+}
 function renderList() {
+  updateDrops();
   const ul = $("list"); ul.innerHTML = "";
   files.forEach((f, i) => {
     const li = document.createElement("li");
