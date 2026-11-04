@@ -92,7 +92,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
       <h2>Layout</h2>
       <div class="row">
         <label class="f">Paper
-          <select id="pageSize"><option value="letter">Letter 8.5×11</option><option value="legal">Legal 8.5×14</option><option value="tabloid">Tabloid 11×17</option></select>
+          <select id="pageSize" disabled><option value="letter">8.5×11</option></select>
         </label>
         <label class="f">Orientation
           <select id="orientation"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option><option value="auto">Auto (fit plan)</option></select>
@@ -241,29 +241,30 @@ async function buildPdf(PDFLib, items, opts) {
     let [pw, ph] = PAGE_SIZES[opts.pageSize] || PAGE_SIZES.letter;
     const SIDE_GAP = 28;
     const ratio = s.pieces.reduce((t, p) => t + p.w / p.h, 0);
-    const landscape = opts.orientation === "landscape" || (opts.orientation === "auto" && (s.pieces.length > 1 || ratio > 1.1));
+    const landscape = opts.orientation === "landscape" || (opts.orientation === "auto" && (s.pieces.length > 1 ? ratio > 1.4 : ratio > 1.1));
     if (landscape) [pw, ph] = [ph, pw];
     const page = doc.addPage([pw, ph]);
 
-    // write-in field, top right (e.g. "UNIT #: ________")
+    // header row: building logo top left, write-in field top right, sharing one center line
     let headTop = ph - M;
+    const bArt = await buildingArt(s.building);
+    const us = 9;
+    let rowCenter = ph - M - us * 0.4;
+    if (bArt) {
+      const r = bArt.width / bArt.height, area = 3300 * (opts.buildingScale || 1);
+      const bh = Math.sqrt(area / r), bw = bh * r;   // sized by area so wide and compact marks look balanced
+      rowCenter = ph - M - bh / 2;
+      page.drawImage(bArt, { x: M, y: ph - M - bh, width: bw, height: bh });
+      headTop = ph - M - bh - 10;
+    }
     if (opts.unitLabel) {
-      const us = 9, lineW = 96, uy = ph - M - us;
+      const lineW = 96, uy = rowCenter - us * 0.35;
       const label = winAnsiSafe(font, opts.unitLabel.trim().toUpperCase());
       let lw = 0; for (const ch of label) lw += font.widthOfTextAtSize(ch, us) + 0.06 * us;
       const lx = pw - M - lineW - 6 - lw;
       let x = lx; for (const ch of label) { page.drawText(ch, { x, y: uy, size: us, font, color: green }); x += font.widthOfTextAtSize(ch, us) + 0.06 * us; }
       page.drawLine({ start: { x: pw - M - lineW, y: uy - 2 }, end: { x: pw - M, y: uy - 2 }, thickness: 0.75, color: green });
-      headTop = uy - 14;
-    }
-
-    // building logo, centered above the name; sized by area so wide and compact marks look balanced
-    const bArt = await buildingArt(s.building);
-    if (bArt) {
-      const r = bArt.width / bArt.height, area = 3300 * (opts.buildingScale || 1);
-      const bh = Math.sqrt(area / r), bw = bh * r;
-      page.drawImage(bArt, { x: (pw - bw) / 2, y: ph - M - bh, width: bw, height: bh });
-      headTop = Math.min(headTop, ph - M - bh - 16);
+      headTop = Math.min(headTop, uy - 14);
     }
 
     // title
@@ -297,16 +298,27 @@ async function buildPdf(PDFLib, items, opts) {
     // floor plan, scaled to fit the space between
     const gap = 22;
     const boxX = M, boxY = bottom + gap, boxW = pw - 2 * M, boxH = (top - gap) - boxY;
-    // pieces share one height so a 2D and 3D pair reads as a matched set
     const gaps = SIDE_GAP * (s.pieces.length - 1);
-    const h = Math.min(boxH, (boxW - gaps) / ratio);
-    const totalW = h * ratio + gaps;
-    let x = boxX + (boxW - totalW) / 2;
-    const y = boxY + (boxH - h) / 2;
-    for (const p of s.pieces) {
-      const w = h * p.w / p.h;
-      drawPiece(page, p, x, y, w, h);
-      x += w + SIDE_GAP;
+    if (!landscape && s.pieces.length > 1) {
+      // portrait: stack 2D over 3D, sharing one width
+      const inv = s.pieces.reduce((t, p) => t + p.h / p.w, 0);
+      const w = Math.min(boxW, (boxH - gaps) / inv);
+      let y = boxY + (boxH + (w * inv + gaps)) / 2;      // top of the stack
+      const x = boxX + (boxW - w) / 2;
+      for (const p of s.pieces) {
+        const h = w * p.h / p.w;
+        y -= h; drawPiece(page, p, x, y, w, h); y -= SIDE_GAP;
+      }
+    } else {
+      // side by side, sharing one height so a 2D and 3D pair reads as a matched set
+      const h = Math.min(boxH, (boxW - gaps) / ratio);
+      let x = boxX + (boxW - (h * ratio + gaps)) / 2;
+      const y = boxY + (boxH - h) / 2;
+      for (const p of s.pieces) {
+        const w = h * p.w / p.h;
+        drawPiece(page, p, x, y, w, h);
+        x += w + SIDE_GAP;
+      }
     }
   }
   return doc.save();
@@ -425,7 +437,7 @@ async function rebuild() {
   if (!files.length) { $("frame").removeAttribute("src"); setStatus("Add a floor plan to see the preview."); return; }
   try {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
-      pageSize: $("pageSize").value, orientation: $("orientation").value,
+      pageSize: "letter", orientation: $("orientation").value,
       titleSize: +$("titleSize").value, logoHeight: +$("logoHeight").value,
       upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
