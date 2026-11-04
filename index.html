@@ -48,9 +48,11 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .link:hover{border:0}
 .drop.over{border-color:var(--accent);color:var(--ink)}
 .files{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.files li{display:grid;grid-template-columns:1fr auto auto;gap:4px 8px;align-items:center}
+.files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;grid-template-areas:"name name x" "unit bld bld" "note note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.files li:last-child{border-bottom:0;padding-bottom:0}
+.files .nm{grid-area:name}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
-.files select{max-width:120px}
+.files select{width:100%}
 .files small{grid-column:1/-1;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .tag{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 input[type=text],select,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
@@ -225,9 +227,9 @@ async function buildPdf(PDFLib, items, opts) {
   for (const it of items) {
     if (it.extra) {
       const [a] = await embedFile(it, true), [b] = await embedFile(it.extra, true);
-      sources.push({ title: it.title, building: it.building, pieces: [a, b] });
+      sources.push({ title: it.title, building: it.building, unit: it.unit, pieces: [a, b] });
     } else {
-      for (const p of await embedFile(it, false)) sources.push({ title: it.title, building: it.building, pieces: [p] });
+      for (const p of await embedFile(it, false)) sources.push({ title: it.title, building: it.building, unit: it.unit, pieces: [p] });
     }
   }
 
@@ -261,12 +263,17 @@ async function buildPdf(PDFLib, items, opts) {
       headTop = ph - M - bh - 10;
     }
     if (opts.unitLabel) {
-      const lineW = 96, uy = rowCenter - us * 0.35;
+      const uy = rowCenter - us * 0.35;
+      // a typed unit number sits on the line, larger than the label
+      const unit = winAnsiSafe(font, String(s.unit || "").trim());
+      const vs = 16, vw = unit ? font.widthOfTextAtSize(unit, vs) : 0;
+      const lineW = Math.max(96, vw + 20);
       const label = winAnsiSafe(font, opts.unitLabel.trim().toUpperCase());
       let lw = 0; for (const ch of label) lw += font.widthOfTextAtSize(ch, us) + 0.06 * us;
       const lx = pw - M - lineW - 6 - lw;
       let x = lx; for (const ch of label) { page.drawText(ch, { x, y: uy, size: us, font, color: green }); x += font.widthOfTextAtSize(ch, us) + 0.06 * us; }
       page.drawLine({ start: { x: pw - M - lineW, y: uy - 2 }, end: { x: pw - M, y: uy - 2 }, thickness: 0.75, color: green });
+      if (unit) page.drawText(unit, { x: pw - M - lineW / 2 - vw / 2, y: uy + 1, size: vs, font, color: green });
       headTop = Math.min(headTop, uy - 14);
     }
 
@@ -404,7 +411,12 @@ function renderList() {
     sel.id = "bld-" + i; sel.setAttribute("aria-label", "Building");
     sel.innerHTML = buildingOptions(); sel.value = f.building || "";
     sel.onchange = () => { f.building = sel.value; schedule(); };
-    li.append(inp, sel, rm, sm); ul.append(li);
+    const un = document.createElement("input");
+    un.type = "text"; un.id = "unit-" + i; un.className = "un"; un.placeholder = "Unit # (optional)";
+    un.value = f.unit || ""; un.setAttribute("aria-label", "Unit number to print");
+    un.oninput = () => { f.unit = un.value; schedule(); };
+    inp.classList.add("nm"); sel.classList.add("bd"); rm.classList.add("ux");
+    li.append(inp, rm, un, sel, sm); ul.append(li);
   });
 }
 
@@ -479,7 +491,7 @@ function schedule() { clearTimeout(timer); timer = setTimeout(rebuild, 200); }
 async function rebuild() {
   if (!files.length) { $("frame").removeAttribute("src"); setStatus("Add a floor plan to see the preview."); return; }
   try {
-    const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
+    const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, unit: f.unit || "", kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
       pageSize: "letter", orientation: $("orientation").value,
       titleSize: STYLE.titleSize, logoHeight: STYLE.logoHeight,
       upper: STYLE.upper, rule: STYLE.rule, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
