@@ -52,6 +52,8 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .files li:last-child{border-bottom:0;padding-bottom:0}
 .files .nm{grid-area:name}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
+.files input[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:600;letter-spacing:.06em;color:var(--brand);cursor:default}
+.files input[readonly]:focus,.files input[readonly]:focus-visible{outline:none;box-shadow:none}
 .files select{width:100%}
 .files small{grid-column:1/-1;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .tag{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
@@ -379,7 +381,7 @@ function renderList() {
     const li = document.createElement("li");
     const inp = document.createElement("input");
     inp.type = "text"; inp.id = "title-" + i; inp.value = f.title; inp.setAttribute("aria-label", "Printed name");
-    inp.oninput = () => { f.title = inp.value; f.edited = true; schedule(); };
+    inp.readOnly = true; inp.tabIndex = -1;   // name always comes from the file name
     const rm = document.createElement("button");
     rm.className = "x"; rm.type = "button"; rm.textContent = "✕"; rm.setAttribute("aria-label", "Remove " + f.name);
     rm.onclick = () => { files.splice(i, 1); renderList(); schedule(); };
