@@ -33,6 +33,9 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:10px;
 h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:18px;text-align:center;cursor:pointer;color:var(--muted);background:var(--field)}
 .drop strong{color:var(--brand)}
+.hint{font-size:12px}
+.link{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:12px;cursor:pointer;text-decoration:underline}
+.link:hover{border:0}
 .drop.over{border-color:var(--accent);color:var(--ink)}
 .files{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
 .files li{display:grid;grid-template-columns:1fr auto auto;gap:4px 8px;align-items:center}
@@ -76,8 +79,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
 
     <section>
       <h2>Floor plans</h2>
-      <div class="drop" id="drop" tabindex="0" role="button"><strong>Drop PDFs or images</strong><br>or click to choose files</div>
+      <div class="drop" id="drop" tabindex="0" role="button"><strong>Drop PDFs or images</strong><br>or click to choose files<br><span class="hint">2D and 3D files with matching names pair up automatically</span></div>
       <input type="file" id="pick" accept=".pdf,image/*" multiple hidden>
+      <input type="file" id="pick3d" accept=".pdf,image/*" hidden>
       <label class="f">Building (sets all plans; change any one below)
         <select id="buildingAll"></select>
       </label>
@@ -91,7 +95,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
           <select id="pageSize"><option value="letter">Letter 8.5×11</option><option value="legal">Legal 8.5×14</option><option value="tabloid">Tabloid 11×17</option></select>
         </label>
         <label class="f">Orientation
-          <select id="orientation"><option value="auto">Auto (fit plan)</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+          <select id="orientation"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option><option value="auto">Auto (fit plan)</option></select>
         </label>
       </div>
       <div class="row">
@@ -197,28 +201,47 @@ async function buildPdf(PDFLib, items, opts) {
     return bCache[name];
   };
 
-  // collect every source page as { title, art, w, h }
+  // embed one file as a list of drawable pieces { art, image, rot, w, h }
+  const embedFile = async (f, firstOnly) => {
+    if (f.kind === "pdf") {
+      const src = await PDFDocument.load(f.bytes, { ignoreEncryption: true });
+      const idx = firstOnly ? [0] : src.getPageIndices();
+      const embedded = await doc.embedPdf(src, idx);
+      return embedded.map((ep, n) => {
+        const rot = ((src.getPage(idx[n]).getRotation().angle % 360) + 360) % 360;
+        const swap = rot === 90 || rot === 270;
+        return { art: ep, rot, w: swap ? ep.height : ep.width, h: swap ? ep.width : ep.height };
+      });
+    }
+    const img = f.kind === "jpg" ? await doc.embedJpg(f.bytes) : await doc.embedPng(f.bytes);
+    return [{ art: img, image: true, rot: 0, w: img.width, h: img.height }];
+  };
+
+  // one output page per source; a source holds one piece, or two side by side (2D + 3D)
   const sources = [];
   for (const it of items) {
-    if (it.kind === "pdf") {
-      const src = await PDFDocument.load(it.bytes, { ignoreEncryption: true });
-      const idx = src.getPageIndices();
-      const embedded = await doc.embedPdf(src, idx);
-      embedded.forEach((ep, i) => {
-        const rot = ((src.getPage(i).getRotation().angle % 360) + 360) % 360;
-        const swap = rot === 90 || rot === 270;
-        sources.push({ title: it.title, building: it.building, art: ep, rot, w: swap ? ep.height : ep.width, h: swap ? ep.width : ep.height });
-      });
+    if (it.extra) {
+      const [a] = await embedFile(it, true), [b] = await embedFile(it.extra, true);
+      sources.push({ title: it.title, building: it.building, pieces: [a, b] });
     } else {
-      const img = it.kind === "jpg" ? await doc.embedJpg(it.bytes) : await doc.embedPng(it.bytes);
-      sources.push({ title: it.title, building: it.building, art: img, image: true, rot: 0, w: img.width, h: img.height });
+      for (const p of await embedFile(it, false)) sources.push({ title: it.title, building: it.building, pieces: [p] });
     }
   }
+
+  const drawPiece = (page, s, x, y, w, h) => {
+    if (s.image) { page.drawImage(s.art, { x, y, width: w, height: h }); return; }
+    // apply the source page's /Rotate so plans come out the right way up
+    const ew = s.rot % 180 ? h : w, eh = s.rot % 180 ? w : h;
+    const pos = { 0: [x, y], 90: [x, y + h], 180: [x + w, y + h], 270: [x + w, y] }[s.rot];
+    page.drawPage(s.art, { x: pos[0], y: pos[1], width: ew, height: eh, rotate: PDFLib.degrees(-s.rot) });
+  };
 
   const M = 36;                                   // 0.5 in margins
   for (const s of sources) {
     let [pw, ph] = PAGE_SIZES[opts.pageSize] || PAGE_SIZES.letter;
-    const landscape = opts.orientation === "landscape" || (opts.orientation === "auto" && s.w / s.h > 1.1);
+    const SIDE_GAP = 28;
+    const ratio = s.pieces.reduce((t, p) => t + p.w / p.h, 0);
+    const landscape = opts.orientation === "landscape" || (opts.orientation === "auto" && (s.pieces.length > 1 || ratio > 1.1));
     if (landscape) [pw, ph] = [ph, pw];
     const page = doc.addPage([pw, ph]);
 
@@ -274,17 +297,16 @@ async function buildPdf(PDFLib, items, opts) {
     // floor plan, scaled to fit the space between
     const gap = 22;
     const boxX = M, boxY = bottom + gap, boxW = pw - 2 * M, boxH = (top - gap) - boxY;
-    const k = Math.min(boxW / s.w, boxH / s.h);
-    const w = s.w * k, h = s.h * k;
-    const x = boxX + (boxW - w) / 2, y = boxY + (boxH - h) / 2;
-    if (s.image) {
-      page.drawImage(s.art, { x, y, width: w, height: h });
-    } else {
-      // apply the source page's /Rotate so plans come out the right way up
-      const ew = s.rot % 180 ? h : w, eh = s.rot % 180 ? w : h;
-      const { degrees } = PDFLib;
-      const pos = { 0: [x, y], 90: [x, y + h], 180: [x + w, y + h], 270: [x + w, y] }[s.rot];
-      page.drawPage(s.art, { x: pos[0], y: pos[1], width: ew, height: eh, rotate: degrees(-s.rot) });
+    // pieces share one height so a 2D and 3D pair reads as a matched set
+    const gaps = SIDE_GAP * (s.pieces.length - 1);
+    const h = Math.min(boxH, (boxW - gaps) / ratio);
+    const totalW = h * ratio + gaps;
+    let x = boxX + (boxW - totalW) / 2;
+    const y = boxY + (boxH - h) / 2;
+    for (const p of s.pieces) {
+      const w = h * p.w / p.h;
+      drawPiece(page, p, x, y, w, h);
+      x += w + SIDE_GAP;
     }
   }
   return doc.save();
@@ -320,8 +342,18 @@ function renderList() {
     rm.className = "x"; rm.type = "button"; rm.textContent = "✕"; rm.setAttribute("aria-label", "Remove " + f.name);
     rm.onclick = () => { files.splice(i, 1); renderList(); schedule(); };
     const sm = document.createElement("small");
-    sm.innerHTML = f.sample ? '<span class="tag">Placeholder</span> add your floor plans to replace it' : "";
-    if (!f.sample) sm.textContent = f.name;
+    if (f.sample) sm.innerHTML = '<span class="tag">Placeholder</span> add your floor plans to replace it';
+    else {
+      sm.append(f.name + (f.extra ? "  +  " + f.extra.name + "  " : "  "));
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "link"; b.id = "x3d-" + i;
+      b.textContent = f.extra ? "Remove 3D" : "Add 3D image";
+      b.onclick = () => {
+        if (f.extra) { f.extra = null; if (!f.edited) f.title = titleFor(f); renderList(); schedule(); }
+        else { pending3d = f; $("pick3d").click(); }
+      };
+      sm.append(b);
+    }
     const sel = document.createElement("select");
     sel.id = "bld-" + i; sel.setAttribute("aria-label", "Building");
     sel.innerHTML = buildingOptions(); sel.value = f.building || "";
@@ -343,15 +375,46 @@ async function toBytes(file) {
   return { kind: "png", bytes: dataToBytes(c.toDataURL("image/png")) };
 }
 
+const DIM = /(^|[\s_\-.(])([23]d)(?=$|[\s_\-.)])/i;
+const stem = n => n.replace(/\.[^.\/\\]+$/, "");
+const dimOf = n => { const m = stem(n).match(DIM); return m ? m[2].toUpperCase() : ""; };
+const pairKey = n => stem(n).replace(DIM, "$1").replace(/[\s_\-()]+/g, " ").trim().toLowerCase();
+// paired pages drop the "2D"/"3D" tag from the printed name
+function titleFor(f) {
+  const n = f.extra ? stem(f.name).replace(DIM, "$1").replace(/[\s_\-]+$/, "").replace(/\(\s*\)/, "") : f.name;
+  return cleanName(f.extra ? n + ".x" : n, nameOpts());
+}
+
+let pending3d = null;
+$("pick3d").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file || !pending3d) return;
+  try { pending3d.extra = { name: file.name, ...(await toBytes(file)) }; if (!pending3d.edited) pending3d.title = titleFor(pending3d); }
+  catch (err) { setStatus(`Couldn't read ${file.name}. Use a PDF, JPG or PNG.`); }
+  pending3d = null; renderList(); schedule();
+};
+
 async function addFiles(list) {
   files = files.filter(f => !f.sample);
   const added = [];
   for (const file of list) {
-    try { added.push({ name: file.name, title: cleanName(file.name, nameOpts()), building: $("buildingAll").value, ...(await toBytes(file)) }); }
+    try { added.push({ name: file.name, building: $("buildingAll").value, ...(await toBytes(file)) }); }
     catch (e) { setStatus(`Couldn't read ${file.name}. Use a PDF, JPG or PNG.`); }
   }
-  added.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
-  files.push(...added); renderList(); schedule();
+  // pair a 3D file with the 2D (or untagged) file of the same name, new or already in the list
+  const threeDs = added.filter(f => dimOf(f.name) === "3D");
+  const others = added.filter(f => dimOf(f.name) !== "3D");
+  const pool = [...files.filter(f => !f.extra), ...others];
+  const unpaired = [];
+  for (const d of threeDs) {
+    const host = pool.find(f => !f.extra && pairKey(f.name) === pairKey(d.name));
+    if (host) { host.extra = { name: d.name, kind: d.kind, bytes: d.bytes }; if (!host.edited) host.title = titleFor(host); }
+    else unpaired.push(d);
+  }
+  const fresh = [...others, ...unpaired];
+  fresh.forEach(f => { if (!f.title) f.title = titleFor(f); });
+  fresh.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+  files.push(...fresh); renderList(); schedule();
 }
 
 function setStatus(t) { $("status").textContent = t; }
@@ -360,7 +423,7 @@ function schedule() { clearTimeout(timer); timer = setTimeout(rebuild, 200); }
 async function rebuild() {
   if (!files.length) { $("frame").removeAttribute("src"); setStatus("Add a floor plan to see the preview."); return; }
   try {
-    const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, kind: f.kind, bytes: f.bytes })), {
+    const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
       pageSize: $("pageSize").value, orientation: $("orientation").value,
       titleSize: +$("titleSize").value, logoHeight: +$("logoHeight").value,
       upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
@@ -374,7 +437,7 @@ async function rebuild() {
 
 // names follow the formatting toggles unless you've typed your own
 ["upper", "underscores"].forEach(id => $(id).addEventListener("change", () => {
-  files.forEach(f => { if (!f.edited) f.title = f.sample ? cleanName("Floor Plan Name.png", nameOpts()) : cleanName(f.name, nameOpts()); });
+  files.forEach(f => { if (!f.edited) f.title = f.sample ? cleanName("Floor Plan Name.png", nameOpts()) : titleFor(f); });
   renderList(); schedule();
 }));
 ["pageSize", "orientation", "titleSize", "logoHeight", "rule", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
