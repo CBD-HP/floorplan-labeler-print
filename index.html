@@ -273,7 +273,7 @@ async function buildPdf(PDFLib, items, opts) {
     // title
     const title = winAnsiSafe(font, s.title || "");
     const tSize = opts.titleSize;
-    const titleY = headTop - tSize * 0.8;
+    const titleY = headTop - 16 - tSize * 0.8;          // breathing room below the header row
     drawTracked(page, title, { font, size: tSize, y: titleY, tracking: opts.upper ? 0.14 : 0.02, pageW: pw, color: green, maxW: pw - 2 * M });
     let top = titleY - tSize * 0.45;
     if (opts.rule) {
