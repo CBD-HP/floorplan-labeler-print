@@ -354,7 +354,7 @@ const STYLE = { upper: true, underscores: true, rule: true, titleSize: 20, logoH
 const nameOpts = () => ({ upper: STYLE.upper, underscores: STYLE.underscores });
 
 function buildingOptions() {
-  return '<option value="">No building</option>' + Object.keys(BUILDINGS).map(b => `<option value="${b}">${b}</option>`).join("");
+  return '<option value="">Choose building</option>' + Object.keys(BUILDINGS).map(b => `<option value="${b}">${b}</option>`).join("");
 }
 // upload boxes turn green and list what's been added
 const DROP_TEXT = {
