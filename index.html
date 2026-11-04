@@ -90,21 +90,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
 
     <section>
       <h2>Layout</h2>
-      <div class="row">
-        <label class="f">Paper
-          <select id="pageSize" disabled><option value="letter">8.5×11</option></select>
-        </label>
-        <label class="f">Orientation
-          <select id="orientation"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option><option value="auto">Auto (fit plan)</option></select>
-        </label>
-      </div>
-      <div class="row">
-        <label class="f">Name size <input type="range" id="titleSize" min="12" max="36" value="20"></label>
-        <label class="f">Logo size <input type="range" id="logoHeight" min="30" max="110" value="54"></label>
-      </div>
-      <label class="c"><input type="checkbox" id="upper" checked> All caps name</label>
-      <label class="c"><input type="checkbox" id="underscores" checked> Turn underscores into spaces</label>
-      <label class="c"><input type="checkbox" id="rule" checked> Accent line under name</label>
+      <label class="f">Orientation
+        <select id="orientation"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option><option value="auto">Auto (fit plan)</option></select>
+      </label>
       <label class="f">Write-in field, top right (leave blank to hide)
         <input type="text" id="unitLabel" value="Unit #:">
       </label>
@@ -339,7 +327,9 @@ let files = [];            // { name, title, edited, kind, bytes, sample }
 let logo = { bytes: dataToBytes(DEFAULT_LOGO), kind: "png", url: DEFAULT_LOGO, on: true };
 let pdfUrl = null, timer = null;
 
-const nameOpts = () => ({ upper: $("upper").checked, underscores: $("underscores").checked });
+// fixed house style
+const STYLE = { upper: true, underscores: true, rule: true, titleSize: 20, logoHeight: 54 };
+const nameOpts = () => ({ upper: STYLE.upper, underscores: STYLE.underscores });
 
 function buildingOptions() {
   return '<option value="">No building</option>' + Object.keys(BUILDINGS).map(b => `<option value="${b}">${b}</option>`).join("");
@@ -438,8 +428,8 @@ async function rebuild() {
   try {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
       pageSize: "letter", orientation: $("orientation").value,
-      titleSize: +$("titleSize").value, logoHeight: +$("logoHeight").value,
-      upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
+      titleSize: STYLE.titleSize, logoHeight: STYLE.logoHeight,
+      upper: STYLE.upper, rule: STYLE.rule, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
@@ -449,11 +439,7 @@ async function rebuild() {
 }
 
 // names follow the formatting toggles unless you've typed your own
-["upper", "underscores"].forEach(id => $(id).addEventListener("change", () => {
-  files.forEach(f => { if (!f.edited) f.title = f.sample ? cleanName("Floor Plan Name.png", nameOpts()) : titleFor(f); });
-  renderList(); schedule();
-}));
-["pageSize", "orientation", "titleSize", "logoHeight", "rule", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
+["orientation", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
 
 const drop = $("drop");
 drop.onclick = () => $("pick").click();
