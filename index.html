@@ -97,6 +97,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
       <label class="c"><input type="checkbox" id="upper" checked> All caps name</label>
       <label class="c"><input type="checkbox" id="underscores" checked> Turn underscores into spaces</label>
       <label class="c"><input type="checkbox" id="rule" checked> Accent line under name</label>
+      <label class="f">Write-in field, top right (leave blank to hide)
+        <input type="text" id="unitLabel" value="Unit #:">
+      </label>
     </section>
 
     <section>
@@ -207,10 +210,22 @@ async function buildPdf(PDFLib, items, opts) {
     if (landscape) [pw, ph] = [ph, pw];
     const page = doc.addPage([pw, ph]);
 
+    // write-in field, top right (e.g. "UNIT #: ________")
+    let headTop = ph - M;
+    if (opts.unitLabel) {
+      const us = 9, lineW = 96, uy = ph - M - us;
+      const label = winAnsiSafe(font, opts.unitLabel.trim().toUpperCase());
+      let lw = 0; for (const ch of label) lw += font.widthOfTextAtSize(ch, us) + 0.06 * us;
+      const lx = pw - M - lineW - 6 - lw;
+      let x = lx; for (const ch of label) { page.drawText(ch, { x, y: uy, size: us, font, color: green }); x += font.widthOfTextAtSize(ch, us) + 0.06 * us; }
+      page.drawLine({ start: { x: pw - M - lineW, y: uy - 2 }, end: { x: pw - M, y: uy - 2 }, thickness: 0.75, color: green });
+      headTop = uy - 14;
+    }
+
     // title
     const title = winAnsiSafe(font, s.title || "");
     const tSize = opts.titleSize;
-    const titleY = ph - M - tSize * 0.8;
+    const titleY = headTop - tSize * 0.8;
     drawTracked(page, title, { font, size: tSize, y: titleY, tracking: opts.upper ? 0.14 : 0.02, pageW: pw, color: green, maxW: pw - 2 * M });
     let top = titleY - tSize * 0.45;
     if (opts.rule) {
@@ -318,7 +333,7 @@ async function rebuild() {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, kind: f.kind, bytes: f.bytes })), {
       pageSize: $("pageSize").value, orientation: $("orientation").value,
       titleSize: +$("titleSize").value, logoHeight: +$("logoHeight").value,
-      upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value });
+      upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
@@ -332,7 +347,7 @@ async function rebuild() {
   files.forEach(f => { if (!f.edited) f.title = f.sample ? cleanName("Floor Plan Name.png", nameOpts()) : cleanName(f.name, nameOpts()); });
   renderList(); schedule();
 }));
-["pageSize", "orientation", "titleSize", "logoHeight", "rule", "footer"].forEach(id => $(id).addEventListener("input", schedule));
+["pageSize", "orientation", "titleSize", "logoHeight", "rule", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
 
 const drop = $("drop");
 drop.onclick = () => $("pick").click();
