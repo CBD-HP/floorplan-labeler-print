@@ -392,10 +392,10 @@ const DIM = /(^|[\s_\-.(])([23]d)(?=$|[\s_\-.)])/i;
 const stem = n => n.replace(/\.[^.\/\\]+$/, "");
 const dimOf = n => { const m = stem(n).match(DIM); return m ? m[2].toUpperCase() : ""; };
 const pairKey = n => stem(n).replace(DIM, "$1").replace(/[\s_\-()]+/g, " ").trim().toLowerCase();
-// paired pages drop the "2D"/"3D" tag from the printed name
+// printed names drop the "2D"/"3D" tag
 function titleFor(f) {
-  const n = f.extra ? stem(f.name).replace(DIM, "$1").replace(/[\s_\-]+$/, "").replace(/\(\s*\)/, "") : f.name;
-  return cleanName(f.extra ? n + ".x" : n, nameOpts());
+  const n = stem(f.name).replace(DIM, "$1").replace(/\(\s*\)/, "").replace(/^[\s_\-]+|[\s_\-]+$/g, "");
+  return cleanName((n || stem(f.name)) + ".x", nameOpts());
 }
 
 let pending3d = null;
