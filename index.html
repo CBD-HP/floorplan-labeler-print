@@ -60,6 +60,7 @@ input[type=text],select,textarea{font:inherit;color:var(--ink);background:var(--
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 label.c{display:flex;gap:8px;align-items:center;font-size:14px}
 input[type=range]{accent-color:var(--accent)}
+.locked{font-size:12px;color:var(--muted);margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px}
 .logo{display:flex;gap:12px;align-items:center}
 .logo img{height:46px;max-width:150px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px}
 button{font:600 14px var(--body);border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;cursor:pointer}
@@ -116,21 +117,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
       </label>
     </section>
 
-    <section>
-      <h2>Logo</h2>
-      <div class="logo">
-        <img id="logoImg" alt="Current logo">
-        <div class="actions">
-          <button id="logoChange" type="button">Change</button>
-          <button id="logoToggle" type="button">Remove</button>
-        </div>
-      </div>
-      <input type="file" id="logoPick" accept="image/png,image/jpeg" hidden>
-      <label class="f">Contact info under logo (one line per row)
-        <textarea id="footer" rows="3">325 Waterfront Way, Washougal, WA 98671
-(833) 725-1695  |  liveathyaspoint.com</textarea>
-      </label>
-    </section>
+    <p class="locked">The Hyas Point logo and contact info are locked. Need a change? Contact the marketing team.</p>
 
   </aside>
   <main class="preview"><iframe id="frame" title="Print preview"></iframe></main>
@@ -351,6 +338,7 @@ let logo = { bytes: dataToBytes(DEFAULT_LOGO), kind: "png", url: DEFAULT_LOGO, o
 let pdfUrl = null, timer = null;
 
 // fixed house style
+const FOOTER = "325 Waterfront Way, Washougal, WA 98671\n(833) 725-1695  |  liveathyaspoint.com";
 const STYLE = { upper: true, underscores: true, rule: true, titleSize: 20, logoHeight: 54 };
 const nameOpts = () => ({ upper: STYLE.upper, underscores: STYLE.underscores });
 
@@ -516,7 +504,7 @@ async function rebuild() {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, unit: f.unit || "", kind: f.kind, bytes: f.bytes, extra: f.extra || null })), {
       pageSize: "letter", orientation: $("orientation").value,
       titleSize: STYLE.titleSize, logoHeight: STYLE.logoHeight,
-      upper: STYLE.upper, rule: STYLE.rule, logo: logo.on ? logo : null, footer: $("footer").value, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
+      upper: STYLE.upper, rule: STYLE.rule, logo: logo.on ? logo : null, footer: FOOTER, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
@@ -530,7 +518,7 @@ async function rebuild() {
 }
 
 // names follow the formatting toggles unless you've typed your own
-["orientation", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
+["orientation", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
 
 function wireDrop(boxId, inputId, slot) {
   const box = $(boxId), input = $(inputId);
@@ -546,18 +534,6 @@ wireDrop("drop3d", "pick3dBulk", "3d");
 // dropping anywhere else sorts files by "2D"/"3D" in their names
 window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("drop", e => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
-
-$("logoImg").src = logo.url;
-$("logoChange").onclick = () => $("logoPick").click();
-$("logoPick").onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  const r = await toBytes(f); logo = { ...r, url: URL.createObjectURL(f), on: true };
-  $("logoImg").src = logo.url; $("logoImg").style.opacity = 1; $("logoToggle").textContent = "Remove"; e.target.value = ""; schedule();
-};
-$("logoToggle").onclick = () => {
-  logo.on = !logo.on; $("logoImg").style.opacity = logo.on ? 1 : .3;
-  $("logoToggle").textContent = logo.on ? "Remove" : "Add back"; schedule();
-};
 
 function stamp() { return files.length === 1 ? files[0].title : "Floor Plans"; }
 $("download").onclick = () => {
