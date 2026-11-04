@@ -48,7 +48,7 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .link:hover{border:0}
 .drop.over{border-color:var(--accent);color:var(--ink)}
 .files{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"name name" "unit bld" "note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"name name" "unit ." "note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .files li:last-child{border-bottom:0;padding-bottom:0}
 .files .nm{grid-area:name}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
@@ -101,7 +101,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
       <input type="file" id="pick3dBulk" accept=".pdf,image/*" multiple hidden>
       <input type="file" id="pick3d" accept=".pdf,image/*" hidden>
       <input type="file" id="pick2dOne" accept=".pdf,image/*" hidden>
-      <label class="f">Building (sets all plans; change any one below)
+      <label class="f">Building
         <select id="buildingAll"></select>
       </label>
       <ul class="files" id="list"></ul>
@@ -396,16 +396,12 @@ function renderList() {
       };
       sm.append(b);
     }
-    const sel = document.createElement("select");
-    sel.id = "bld-" + i; sel.setAttribute("aria-label", "Building");
-    sel.innerHTML = buildingOptions(); sel.value = f.building || "";
-    sel.onchange = () => { f.building = sel.value; schedule(); };
     const un = document.createElement("input");
     un.type = "text"; un.id = "unit-" + i; un.className = "un"; un.placeholder = "Unit # (optional)";
     un.value = f.unit || ""; un.setAttribute("aria-label", "Unit number to print");
     un.oninput = () => { f.unit = un.value; schedule(); };
-    inp.classList.add("nm"); sel.classList.add("bd");
-    li.append(inp, un, sel, sm); ul.append(li);
+    inp.classList.add("nm");
+    li.append(inp, un, sm); ul.append(li);
   });
 }
 
@@ -546,7 +542,7 @@ $("print").onclick = () => {
 
 for (const [k, v] of Object.entries(BUILDINGS)) BUILDING_BYTES[k] = dataToBytes(v);
 $("buildingAll").innerHTML = buildingOptions();
-$("buildingAll").onchange = () => { files.forEach(f => f.building = $("buildingAll").value); renderList(); schedule(); };
+$("buildingAll").onchange = () => { files.forEach(f => f.building = $("buildingAll").value); schedule(); };
 
 // start with an example so the preview isn't empty
 files = [{ name: "Floor Plan Name.png", title: cleanName("Floor Plan Name.png", nameOpts()), kind: "png", bytes: dataToBytes(SAMPLE), sample: true,
