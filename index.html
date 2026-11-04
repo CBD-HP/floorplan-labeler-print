@@ -33,7 +33,11 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:10px;
 h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:18px;text-align:center;cursor:pointer;color:var(--muted);background:var(--field)}
 .drop strong{color:var(--brand)}
-.hint{font-size:12px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.drops{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.drops .drop{padding:16px 10px}
+.step{display:block;font:500 11px/1.4 var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+.warn{color:var(--accent);font-weight:600}
 .link{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:12px;cursor:pointer;text-decoration:underline}
 .link:hover{border:0}
 .drop.over{border-color:var(--accent);color:var(--ink)}
@@ -79,8 +83,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
 
     <section>
       <h2>Floor plans</h2>
-      <div class="drop" id="drop" tabindex="0" role="button"><strong>Drop PDFs or images</strong><br>or click to choose files<br><span class="hint">2D and 3D files with matching names pair up automatically</span></div>
-      <input type="file" id="pick" accept=".pdf,image/*" multiple hidden>
+      <div class="drops">
+        <div class="drop" id="drop2d" tabindex="0" role="button"><span class="step">Step 1</span><strong>Add 2D floor plan</strong><br>Drop or click</div>
+        <div class="drop" id="drop3d" tabindex="0" role="button"><span class="step">Step 2</span><strong>Add 3D floor plan</strong><br>Drop or click</div>
+      </div>
+      <p class="hint">Add both for each unit. They print side by side. PDF, JPG or PNG.</p>
+      <input type="file" id="pick2d" accept=".pdf,image/*" multiple hidden>
+      <input type="file" id="pick3dBulk" accept=".pdf,image/*" multiple hidden>
       <input type="file" id="pick3d" accept=".pdf,image/*" hidden>
       <label class="f">Building (sets all plans; change any one below)
         <select id="buildingAll"></select>
@@ -348,6 +357,7 @@ function renderList() {
     if (f.sample) sm.innerHTML = '<span class="tag">Placeholder</span> add your floor plans to replace it';
     else {
       sm.append(f.name + (f.extra ? "  +  " + f.extra.name + "  " : "  "));
+      if (!f.extra) { const w = document.createElement("span"); w.className = "warn"; w.textContent = "No 3D yet  "; sm.append(w); }
       const b = document.createElement("button");
       b.type = "button"; b.className = "link"; b.id = "x3d-" + i;
       b.textContent = f.extra ? "Remove 3D" : "Add 3D image";
@@ -397,7 +407,8 @@ $("pick3d").onchange = async e => {
   pending3d = null; renderList(); schedule();
 };
 
-async function addFiles(list) {
+// slot: "2d" or "3d" for the matching drop box; omitted = decide by the file name
+async function addFiles(list, slot) {
   files = files.filter(f => !f.sample);
   const added = [];
   for (const file of list) {
@@ -405,14 +416,23 @@ async function addFiles(list) {
     catch (e) { setStatus(`Couldn't read ${file.name}. Use a PDF, JPG or PNG.`); }
   }
   // pair a 3D file with the 2D (or untagged) file of the same name, new or already in the list
-  const threeDs = added.filter(f => dimOf(f.name) === "3D");
-  const others = added.filter(f => dimOf(f.name) !== "3D");
+  const is3d = f => slot ? slot === "3d" : dimOf(f.name) === "3D";
+  const threeDs = added.filter(is3d);
+  const others = added.filter(f => !is3d(f));
+  others.sort((a, b) => titleFor(a).localeCompare(titleFor(b), undefined, { numeric: true }));
   const pool = [...files.filter(f => !f.extra), ...others];
   const unpaired = [];
+  threeDs.sort((a, b) => titleFor(a).localeCompare(titleFor(b), undefined, { numeric: true }));
+  const attach = (host, d) => { host.extra = { name: d.name, kind: d.kind, bytes: d.bytes }; if (!host.edited) host.title = titleFor(host); };
+  // pass 1: matching names; pass 2 (3D box only): next 2D plan still missing a 3D
+  const left = [];
   for (const d of threeDs) {
     const host = pool.find(f => !f.extra && pairKey(f.name) === pairKey(d.name));
-    if (host) { host.extra = { name: d.name, kind: d.kind, bytes: d.bytes }; if (!host.edited) host.title = titleFor(host); }
-    else unpaired.push(d);
+    host ? attach(host, d) : left.push(d);
+  }
+  for (const d of left) {
+    const host = slot === "3d" ? pool.find(f => !f.extra) : null;
+    host ? attach(host, d) : unpaired.push(d);
   }
   const fresh = [...others, ...unpaired];
   fresh.forEach(f => { if (!f.title) f.title = titleFor(f); });
@@ -434,22 +454,29 @@ async function rebuild() {
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
     const n = files.filter(f => !f.sample).length;
-    setStatus(n ? `${n} file${n > 1 ? "s" : ""} ready to print.` : "Add floor plans to get started.");
+    const missing = files.filter(f => !f.sample && !f.extra).length;
+    setStatus(!n ? "Add a 2D and 3D floor plan to get started."
+      : `${n} plan${n > 1 ? "s" : ""} ready to print.` + (missing ? ` ${missing} still need${missing > 1 ? "" : "s"} a 3D floor plan.` : ""));
   } catch (e) { console.error(e); setStatus("Couldn't build the PDF: " + e.message); }
 }
 
 // names follow the formatting toggles unless you've typed your own
 ["orientation", "footer", "unitLabel"].forEach(id => $(id).addEventListener("input", schedule));
 
-const drop = $("drop");
-drop.onclick = () => $("pick").click();
-drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("pick").click(); } };
-$("pick").onchange = e => { addFiles([...e.target.files]); e.target.value = ""; };
-["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", e => addFiles([...e.dataTransfer.files]));
+function wireDrop(boxId, inputId, slot) {
+  const box = $(boxId), input = $(inputId);
+  box.onclick = () => input.click();
+  box.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } };
+  input.onchange = e => { addFiles([...e.target.files], slot); e.target.value = ""; };
+  ["dragenter", "dragover"].forEach(t => box.addEventListener(t, e => { e.preventDefault(); e.stopPropagation(); box.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t => box.addEventListener(t, e => { e.preventDefault(); box.classList.remove("over"); }));
+  box.addEventListener("drop", e => { e.stopPropagation(); addFiles([...e.dataTransfer.files], slot); });
+}
+wireDrop("drop2d", "pick2d", "2d");
+wireDrop("drop3d", "pick3dBulk", "3d");
+// dropping anywhere else sorts files by "2D"/"3D" in their names
 window.addEventListener("dragover", e => e.preventDefault());
-window.addEventListener("drop", e => { e.preventDefault(); if (e.target !== drop) addFiles([...e.dataTransfer.files]); });
+window.addEventListener("drop", e => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
 
 $("logoImg").src = logo.url;
 $("logoChange").onclick = () => $("logoPick").click();
