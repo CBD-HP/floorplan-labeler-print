@@ -99,6 +99,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
       <input type="file" id="pick2d" accept=".pdf,image/*" multiple hidden>
       <input type="file" id="pick3dBulk" accept=".pdf,image/*" multiple hidden>
       <input type="file" id="pick3d" accept=".pdf,image/*" hidden>
+      <input type="file" id="pick2dOne" accept=".pdf,image/*" hidden>
       <label class="f">Building (sets all plans; change any one below)
         <select id="buildingAll"></select>
       </label>
@@ -364,7 +365,8 @@ const DROP_TEXT = {
 let lastCounts = { drop2d: 0, drop3d: 0 };
 function updateDrops() {
   const real = files.filter(f => !f.sample);
-  const lists = { drop2d: real.map(f => f.name), drop3d: real.filter(f => f.extra).map(f => f.extra.name) };
+  const lists = { drop2d: real.filter(f => f.slot !== "3d").map(f => f.name),
+    drop3d: real.flatMap(f => f.slot === "3d" ? [f.name] : f.extra ? [f.extra.name] : []) };
   for (const id of ["drop2d", "drop3d"]) {
     const box = $(id), [step, empty, done] = DROP_TEXT[id], names = lists[id];
     box.classList.toggle("done", names.length > 0);
@@ -396,13 +398,15 @@ function renderList() {
     const sm = document.createElement("small");
     if (f.sample) sm.innerHTML = '<span class="tag">Placeholder</span> add your floor plans to replace it';
     else {
+      const only3d = f.slot === "3d";
       sm.append(f.name + (f.extra ? "  +  " + f.extra.name + "  " : "  "));
-      if (!f.extra) { const w = document.createElement("span"); w.className = "warn"; w.textContent = "No 3D yet  "; sm.append(w); }
+      if (!f.extra) { const w = document.createElement("span"); w.className = "warn"; w.textContent = only3d ? "No 2D yet  " : "No 3D yet  "; sm.append(w); }
       const b = document.createElement("button");
       b.type = "button"; b.className = "link"; b.id = "x3d-" + i;
-      b.textContent = f.extra ? "Remove 3D" : "Add 3D image";
+      b.textContent = only3d ? "Add 2D image" : f.extra ? "Remove 3D" : "Add 3D image";
       b.onclick = () => {
-        if (f.extra) { f.extra = null; if (!f.edited) f.title = titleFor(f); renderList(); schedule(); }
+        if (only3d) { pending2d = f; $("pick2dOne").click(); }
+        else if (f.extra) { f.extra = null; if (!f.edited) f.title = titleFor(f); renderList(); schedule(); }
         else { pending3d = f; $("pick3d").click(); }
       };
       sm.append(b);
@@ -443,7 +447,14 @@ function titleFor(f) {
   return cleanName((n || stem(f.name)) + ".x", nameOpts());
 }
 
-let pending3d = null;
+let pending3d = null, pending2d = null;
+$("pick2dOne").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file || !pending2d) return;
+  try { absorb(pending2d, { name: file.name, ...(await toBytes(file)) }); }
+  catch (err) { setStatus(`Couldn't read ${file.name}. Use a PDF, JPG or PNG.`); }
+  pending2d = null; renderList(); schedule();
+};
 $("pick3d").onchange = async e => {
   const file = e.target.files[0]; e.target.value = "";
   if (!file || !pending3d) return;
@@ -453,6 +464,20 @@ $("pick3d").onchange = async e => {
 };
 
 // slot: "2d" or "3d" for the matching drop box; omitted = decide by the file name
+// each plan has f.slot: "2d" (a 2D, maybe with f.extra = its 3D) or "3d" (a 3D still waiting for its 2D)
+const byTitle = (a, b) => titleFor(a).localeCompare(titleFor(b), undefined, { numeric: true });
+const attach3d = (host, d) => { host.extra = { name: d.name, kind: d.kind, bytes: d.bytes }; if (!host.edited) host.title = titleFor(host); };
+// a 2D arrives for a plan that so far only has its 3D: the 2D becomes the plan, the 3D moves beside it
+function absorb(lone, two) {
+  two.slot = "2d";
+  two.extra = { name: lone.name, kind: lone.kind, bytes: lone.bytes };
+  two.building = lone.building || two.building;
+  two.unit = lone.unit || "";
+  two.edited = lone.edited;
+  two.title = lone.edited ? lone.title : titleFor(two);
+  files[files.indexOf(lone)] = two;
+}
+
 async function addFiles(list, slot) {
   files = files.filter(f => !f.sample);
   const added = [];
@@ -460,26 +485,23 @@ async function addFiles(list, slot) {
     try { added.push({ name: file.name, building: $("buildingAll").value, ...(await toBytes(file)) }); }
     catch (e) { setStatus(`Couldn't read ${file.name}. Use a PDF, JPG or PNG.`); }
   }
-  // pair a 3D file with the 2D (or untagged) file of the same name, new or already in the list
-  const is3d = f => slot ? slot === "3d" : dimOf(f.name) === "3D";
-  const threeDs = added.filter(is3d);
-  const others = added.filter(f => !is3d(f));
-  others.sort((a, b) => titleFor(a).localeCompare(titleFor(b), undefined, { numeric: true }));
-  const pool = [...files.filter(f => !f.extra), ...others];
-  const unpaired = [];
-  threeDs.sort((a, b) => titleFor(a).localeCompare(titleFor(b), undefined, { numeric: true }));
-  const attach = (host, d) => { host.extra = { name: d.name, kind: d.kind, bytes: d.bytes }; if (!host.edited) host.title = titleFor(host); };
-  // pass 1: matching names; pass 2 (3D box only): next 2D plan still missing a 3D
-  const left = [];
-  for (const d of threeDs) {
-    const host = pool.find(f => !f.extra && pairKey(f.name) === pairKey(d.name));
-    host ? attach(host, d) : left.push(d);
-  }
-  for (const d of left) {
-    const host = slot === "3d" ? pool.find(f => !f.extra) : null;
-    host ? attach(host, d) : unpaired.push(d);
-  }
-  const fresh = [...others, ...unpaired];
+  added.forEach(f => f.slot = (slot ? slot === "3d" : dimOf(f.name) === "3D") ? "3d" : "2d");
+  const twos = added.filter(f => f.slot === "2d").sort(byTitle);
+  const threes = added.filter(f => f.slot === "3d").sort(byTitle);
+
+  // new 2Ds first claim 3D-only plans already listed: matching names, then (2D box) in order
+  const lone = () => files.filter(f => f.slot === "3d");
+  const fresh2 = [], rest2 = [];
+  for (const t of twos) { const m = lone().find(f => pairKey(f.name) === pairKey(t.name)); m ? absorb(m, t) : rest2.push(t); }
+  for (const t of rest2) { const m = slot === "2d" ? lone()[0] : null; m ? absorb(m, t) : fresh2.push(t); }
+
+  // new 3Ds attach to 2D plans missing one: matching names, then (3D box) in order
+  const pool = [...files.filter(f => f.slot !== "3d" && !f.extra), ...fresh2];
+  const left = [], unpaired = [];
+  for (const d of threes) { const h = pool.find(f => !f.extra && pairKey(f.name) === pairKey(d.name)); h ? attach3d(h, d) : left.push(d); }
+  for (const d of left) { const h = slot === "3d" ? pool.find(f => !f.extra) : null; h ? attach3d(h, d) : unpaired.push(d); }
+
+  const fresh = [...fresh2, ...unpaired];
   fresh.forEach(f => { if (!f.title) f.title = titleFor(f); });
   fresh.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
   files.push(...fresh); renderList(); schedule();
@@ -499,9 +521,11 @@ async function rebuild() {
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
     const n = files.filter(f => !f.sample).length;
-    const missing = files.filter(f => !f.sample && !f.extra).length;
+    const real = files.filter(f => !f.sample);
+    const need3 = real.filter(f => f.slot !== "3d" && !f.extra).length, need2 = real.filter(f => f.slot === "3d").length;
+    const note = (k, what) => k ? ` ${k} still need${k > 1 ? "" : "s"} a ${what} floor plan.` : "";
     setStatus(!n ? "Add a 2D and 3D floor plan to get started."
-      : `${n} plan${n > 1 ? "s" : ""} ready to print.` + (missing ? ` ${missing} still need${missing > 1 ? "" : "s"} a 3D floor plan.` : ""));
+      : `${n} plan${n > 1 ? "s" : ""} ready to print.` + note(need3, "3D") + note(need2, "2D"));
   } catch (e) { console.error(e); setStatus("Couldn't build the PDF: " + e.message); }
 }
 
