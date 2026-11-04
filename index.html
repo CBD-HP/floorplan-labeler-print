@@ -376,6 +376,7 @@ function renderList() {
   updateDrops();
   const ul = $("list"); ul.innerHTML = "";
   files.forEach((f, i) => {
+    if (f.sample) return;   // the placeholder only shows in the preview
     const li = document.createElement("li");
     const inp = document.createElement("input");
     inp.type = "text"; inp.id = "title-" + i; inp.value = f.title; inp.setAttribute("aria-label", "Printed name");
