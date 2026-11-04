@@ -39,7 +39,7 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .files input{width:100%;min-width:0}
 .files small{grid-column:1/-1;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .tag{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-input[type=text],select{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+input[type=text],select,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 label.c{display:flex;gap:8px;align-items:center;font-size:14px}
@@ -109,6 +109,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
         </div>
       </div>
       <input type="file" id="logoPick" accept="image/png,image/jpeg" hidden>
+      <label class="f">Contact info under logo (one line per row)
+        <textarea id="footer" rows="3">325 Waterfront Way, Washougal, WA 98671
+Apartment Leasing: (855) 287-4419  ·  www.hyaspoint.com/apartments</textarea>
+      </label>
     </section>
 
   </aside>
@@ -214,13 +218,21 @@ async function buildPdf(PDFLib, items, opts) {
       top -= 12;
     }
 
-    // logo
+    // contact lines (bottom up), then logo above them
     let bottom = M;
+    const lines = (opts.footer || "").split("\n").map(l => l.trim()).filter(Boolean);
+    const fSize = opts.footerSize || 8.5, lead = fSize * 1.55;
+    const muted = rgb(BRAND.green[0] * 0.75 + 0.25 * 0.42, BRAND.green[1] * 0.75 + 0.25 * 0.48, BRAND.green[2] * 0.75 + 0.25 * 0.47);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      drawTracked(page, winAnsiSafe(font, lines[i]), { font, size: fSize, y: bottom, tracking: 0.04, pageW: pw, color: muted, maxW: pw - 2 * M });
+      bottom += lead;
+    }
+    if (lines.length) bottom += 6;
     if (logo) {
       const lh = opts.logoHeight;
       const lw = lh * (logo.width / logo.height);
-      page.drawImage(logo, { x: (pw - lw) / 2, y: M, width: lw, height: lh });
-      bottom = M + lh;
+      page.drawImage(logo, { x: (pw - lw) / 2, y: bottom, width: lw, height: lh });
+      bottom += lh;
     }
 
     // floor plan, scaled to fit the space between
@@ -306,7 +318,7 @@ async function rebuild() {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, kind: f.kind, bytes: f.bytes })), {
       pageSize: $("pageSize").value, orientation: $("orientation").value,
       titleSize: +$("titleSize").value, logoHeight: +$("logoHeight").value,
-      upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null });
+      upper: $("upper").checked, rule: $("rule").checked, logo: logo.on ? logo : null, footer: $("footer").value });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     pdfUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     $("frame").src = pdfUrl + "#toolbar=0&navpanes=0&view=Fit";
@@ -320,7 +332,7 @@ async function rebuild() {
   files.forEach(f => { if (!f.edited) f.title = f.sample ? cleanName("Unit_A1 One Bedroom.png", nameOpts()) : cleanName(f.name, nameOpts()); });
   renderList(); schedule();
 }));
-["pageSize", "orientation", "titleSize", "logoHeight", "rule"].forEach(id => $(id).addEventListener("input", schedule));
+["pageSize", "orientation", "titleSize", "logoHeight", "rule", "footer"].forEach(id => $(id).addEventListener("input", schedule));
 
 const drop = $("drop");
 drop.onclick = () => $("pick").click();
