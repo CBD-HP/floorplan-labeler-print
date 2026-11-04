@@ -48,12 +48,10 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .link:hover{border:0}
 .drop.over{border-color:var(--accent);color:var(--ink)}
 .files{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
-.files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;grid-template-areas:"name name x" "unit bld bld" "note note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"name name" "unit bld" "note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .files li:last-child{border-bottom:0;padding-bottom:0}
 .files .nm{grid-area:name}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
-.files input[readonly]{background:transparent;border-color:transparent;padding-left:0;font-weight:600;letter-spacing:.06em;color:var(--brand);cursor:default}
-.files input[readonly]:focus,.files input[readonly]:focus-visible{outline:none;box-shadow:none}
 .files select{width:100%}
 .files small{grid-column:1/-1;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .tag{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
@@ -381,10 +379,7 @@ function renderList() {
     const li = document.createElement("li");
     const inp = document.createElement("input");
     inp.type = "text"; inp.id = "title-" + i; inp.value = f.title; inp.setAttribute("aria-label", "Printed name");
-    inp.readOnly = true; inp.tabIndex = -1;   // name always comes from the file name
-    const rm = document.createElement("button");
-    rm.className = "x"; rm.type = "button"; rm.textContent = "✕"; rm.setAttribute("aria-label", "Remove " + f.name);
-    rm.onclick = () => { files.splice(i, 1); renderList(); schedule(); };
+    inp.oninput = () => { f.title = inp.value; f.edited = true; schedule(); };
     const sm = document.createElement("small");
     if (f.sample) sm.innerHTML = '<span class="tag">Placeholder</span> add your floor plans to replace it';
     else {
@@ -409,8 +404,8 @@ function renderList() {
     un.type = "text"; un.id = "unit-" + i; un.className = "un"; un.placeholder = "Unit # (optional)";
     un.value = f.unit || ""; un.setAttribute("aria-label", "Unit number to print");
     un.oninput = () => { f.unit = un.value; schedule(); };
-    inp.classList.add("nm"); sel.classList.add("bd"); rm.classList.add("ux");
-    li.append(inp, rm, un, sel, sm); ul.append(li);
+    inp.classList.add("nm"); sel.classList.add("bd");
+    li.append(inp, un, sel, sm); ul.append(li);
   });
 }
 
