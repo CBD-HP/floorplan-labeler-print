@@ -392,9 +392,9 @@ const DIM = /(^|[\s_\-.(])([23]d)(?=$|[\s_\-.)])/i;
 const stem = n => n.replace(/\.[^.\/\\]+$/, "");
 const dimOf = n => { const m = stem(n).match(DIM); return m ? m[2].toUpperCase() : ""; };
 const pairKey = n => stem(n).replace(DIM, "$1").replace(/[\s_\-()]+/g, " ").trim().toLowerCase();
-// printed names drop the "2D"/"3D" tag
+// printed names drop the "2D"/"3D" tag and anything in parentheses
 function titleFor(f) {
-  const n = stem(f.name).replace(DIM, "$1").replace(/\(\s*\)/, "").replace(/^[\s_\-]+|[\s_\-]+$/g, "");
+  const n = stem(f.name).replace(DIM, "$1").replace(/\s*\([^)]*\)?/g, " ").replace(/^[\s_\-]+|[\s_\-]+$/g, "");
   return cleanName((n || stem(f.name)) + ".x", nameOpts());
 }
 
