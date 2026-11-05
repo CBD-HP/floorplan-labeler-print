@@ -423,9 +423,9 @@ const DIM = /(^|[\s_\-.(])([23]d)(?=$|[\s_\-.)])/i;
 const stem = n => n.replace(/\.[^.\/\\]+$/, "");
 const dimOf = n => { const m = stem(n).match(DIM); return m ? m[2].toUpperCase() : ""; };
 const pairKey = n => stem(n).replace(DIM, "$1").replace(/[\s_\-()]+/g, " ").trim().toLowerCase();
+// name comes from the 2D file; a plan with only a 3D uses the 3D name until its 2D arrives
 // printed names drop the "2D"/"3D" tag, including parentheses holding it, e.g. "(2D)"
 function titleFor(f) {
-  if (f.slot === "3d") return "";   // names always come from the 2D file
   const n = stem(f.name).replace(/\s*\([^)]*\b[23]d\b[^)]*\)/gi, " ").replace(DIM, "$1").replace(/\(\s*\)/g, " ").replace(/^[\s_\-]+|[\s_\-]+$/g, "");
   return cleanName((n || stem(f.name)) + ".x", nameOpts());
 }
