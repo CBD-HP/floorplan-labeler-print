@@ -100,8 +100,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
     <section>
       <h2>Floor plans</h2>
       <div class="mode" role="radiogroup" aria-label="Page type">
-        <label><input type="radio" name="mode" id="modePair" value="pair" checked><span>2D + 3D</span></label>
-        <label><input type="radio" name="mode" id="modeSingle" value="single"><span>Single floor plan</span></label>
+        <label><input type="radio" name="mode" id="modeSingle" value="single" checked><span>Single floor plan</span></label>
+        <label><input type="radio" name="mode" id="modePair" value="pair"><span>2D + 3D</span></label>
       </div>
       <div class="drops" id="drops">
         <div class="drop" id="drop2d" tabindex="0" role="button"><span class="step">Step 1</span><strong>Add 2D floor plan</strong><br>Drop or click</div>
@@ -358,7 +358,7 @@ function buildingOptions() {
   return '<option value="">Choose building</option>' + Object.keys(BUILDINGS).map(b => `<option value="${b}">${b}</option>`).join("");
 }
 // upload boxes turn green and list what's been added
-let mode = "pair";
+let mode = "single";
 const HINTS = {
   pair: "Add both for each unit. They print side by side (stacked in portrait). Only have one? It prints centered on the page by itself. PDF, JPG or PNG.",
   single: "Each floor plan prints centered on its own page, named after its file. PDF, JPG or PNG.",
