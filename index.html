@@ -379,7 +379,7 @@ function renderList() {
     if (f.sample) return;   // the placeholder only shows in the preview
     const li = document.createElement("li");
     const inp = document.createElement("input");
-    inp.type = "text"; inp.id = "title-" + i; inp.value = f.title; inp.setAttribute("aria-label", "Printed name");
+    inp.type = "text"; inp.id = "title-" + i; inp.placeholder = "Name comes from the 2D floor plan"; inp.value = f.title; inp.setAttribute("aria-label", "Printed name");
     inp.oninput = () => { f.title = inp.value; f.edited = true; schedule(); };
     const sm = document.createElement("small");
     if (f.sample) sm.innerHTML = '<span class="tag">Placeholder</span> add your floor plans to replace it';
@@ -425,6 +425,7 @@ const dimOf = n => { const m = stem(n).match(DIM); return m ? m[2].toUpperCase()
 const pairKey = n => stem(n).replace(DIM, "$1").replace(/[\s_\-()]+/g, " ").trim().toLowerCase();
 // printed names drop the "2D"/"3D" tag, including parentheses holding it, e.g. "(2D)"
 function titleFor(f) {
+  if (f.slot === "3d") return "";   // names always come from the 2D file
   const n = stem(f.name).replace(/\s*\([^)]*\b[23]d\b[^)]*\)/gi, " ").replace(DIM, "$1").replace(/\(\s*\)/g, " ").replace(/^[\s_\-]+|[\s_\-]+$/g, "");
   return cleanName((n || stem(f.name)) + ".x", nameOpts());
 }
@@ -455,8 +456,8 @@ function absorb(lone, two) {
   two.extra = { name: lone.name, kind: lone.kind, bytes: lone.bytes };
   two.building = lone.building || two.building;
   two.unit = lone.unit || "";
-  two.edited = lone.edited;
-  two.title = lone.edited ? lone.title : titleFor(two);
+  two.edited = false;
+  two.title = titleFor(two);
   files[files.indexOf(lone)] = two;
 }
 
