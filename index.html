@@ -76,6 +76,8 @@ input[type=text],select,textarea{font:inherit;color:var(--ink);background:var(--
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 label.c{display:flex;gap:8px;align-items:center;font-size:14px}
 input[type=range]{accent-color:var(--accent)}
+.clear{align-self:flex-start;color:var(--muted);font-weight:600;font-size:13px}
+.clear.armed{border-color:var(--accent);color:var(--accent)}
 .locked{font-size:12px;color:var(--muted);margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px}
 .logo{display:flex;gap:12px;align-items:center}
 .logo img{height:46px;max-width:150px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px}
@@ -125,6 +127,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
         <select id="buildingAll"></select>
       </label>
       <ul class="files" id="list"></ul>
+      <button type="button" class="clear" id="clearAll" hidden>Start over (clear all floor plans)</button>
     </section>
 
     <section>
@@ -485,6 +488,7 @@ function updateDrops() {
 }
 function renderList() {
   updateDrops();
+  $("clearAll").hidden = !files.some(f => !f.sample);
   const ul = $("list"); ul.innerHTML = "";
   files.forEach((f, i) => {
     if (f.sample) return;   // the placeholder only shows in the preview
@@ -714,6 +718,21 @@ function placeholder() {
   return mode === "single" ? { ...base, bytes: dataToBytes(SAMPLE_ONE), extra: null }
     : { ...base, bytes: dataToBytes(SAMPLE), extra: { name: "3D placeholder.png", kind: "png", bytes: dataToBytes(SAMPLE_3D) } };
 }
+// start over: first click asks, second click clears (the viewer blocks confirm dialogs)
+let clearTimer = null;
+$("clearAll").onclick = () => {
+  const btn = $("clearAll");
+  if (!btn.classList.contains("armed")) {
+    btn.classList.add("armed"); btn.textContent = "Click again to clear everything";
+    clearTimer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Start over (clear all floor plans)"; }, 4000);
+    return;
+  }
+  clearTimeout(clearTimer);
+  btn.classList.remove("armed"); btn.textContent = "Start over (clear all floor plans)";
+  files = [placeholder()]; lastCounts = { drop2d: 0, drop3d: 0 };
+  renderList(); schedule();
+};
+
 files = [placeholder()];
 renderList(); rebuild();
 </script>
