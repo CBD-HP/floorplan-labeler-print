@@ -60,10 +60,11 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .files .nm{grid-area:name}
 .nmwrap{display:flex;flex-direction:column;gap:4px;min-width:0}
 .nmwrap .cap{font-size:12px;color:var(--muted)}
+.nmwrap .cap .hl{color:var(--accent);font-weight:600}
 .nmwrap .caprow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .nmwrap .field{position:relative;display:block}
 .nmwrap input{padding-right:30px}
-.nmwrap .pen{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;display:flex}
+.nmwrap .pen{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--accent);pointer-events:none;display:flex}
 .nmwrap input:hover{border-color:var(--brand)}
 .nmwrap input:hover+.pen,.nmwrap input:focus+.pen{color:var(--accent)}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
@@ -439,7 +440,9 @@ function renderList() {
     const wrap = document.createElement("label");
     wrap.className = "nmwrap nm"; wrap.htmlFor = inp.id;
     const cap = document.createElement("span");
-    cap.className = "cap"; cap.textContent = f.edited ? "Printed name (edited)" : "Printed name \u00b7 click to edit";
+    cap.className = "cap";
+    if (f.edited) cap.textContent = "Printed name (edited)";
+    else { const hl = document.createElement("span"); hl.className = "hl"; hl.textContent = "click to edit"; cap.append("Printed name \u00b7 ", hl); }
     const pen = document.createElement("span");
     pen.className = "pen"; pen.setAttribute("aria-hidden", "true");
     pen.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M11.3 1.7a1.6 1.6 0 0 1 2.3 2.3L5.4 12.2 2 13l.8-3.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
