@@ -211,8 +211,9 @@ let FEE_FONTS = null;
 function feesHeight(fees, w) {
   const perRow = w < 450 ? 2 : Math.max(1, fees.monthly.length - 1);
   const rows = Math.max(fees.oneTime.length, fees.monthly.length > 1 ? 1 + Math.ceil((fees.monthly.length - 1) / perRow) : 1);
-  return 14 + 8 + 22 + 12 + (rows - 1) * 27 + 13 + 14 - 2;
+  return 14 + 8 + 22 + 12 + (rows - 1) * 27 + 13 + 14 - 2 + feesFootH(fees);
 }
+const feesFootH = fees => (fees.notes || []).length ? (fees.notes.length * 8.5 + 8) : 0;
 function drawFees(page, fees, { x, y, w, title }) {
   const { font, bold, rgb } = FEE_FONTS;
   const green = rgb(...BRAND.green), orange = rgb(...BRAND.orange);
@@ -231,16 +232,16 @@ function drawFees(page, fees, { x, y, w, title }) {
   const hy = top - pad - 8;
   track("OTHER COSTS", x + pad, hy, bold, 9.5, green, 0.16);
   page.drawRectangle({ x: x + pad, y: hy - 5, width: 26, height: 1.4, color: orange });
-  const note = fees.note || "";
-  page.drawText(note, { x: x + w - pad - font.widthOfTextAtSize(note, 6.5), y: hy + 1, size: 6.5, font, color: muted });
+  // footnotes along the bottom of the box
+  const notes = fees.notes || [], footH = feesFootH(fees);
+  notes.forEach((n, i) => page.drawText("*" + n, { x: x + pad, y: y + 10 + (notes.length - 1 - i) * 8.5, size: 6.3, font, color: muted }));
 
   const unit = feesUnitType(title);
   const item = (it, xx, yy) => {
     track(it.label.toUpperCase(), xx, yy, bold, 6.3, green, 0.1);
     let vx = xx, vy = yy - 13;
     if (it.tiers) {
-      const pick = unit && it.tiers.find(t => t[0] === unit);
-      const shown = pick ? [pick] : it.tiers;
+      const shown = it.tiers;   // always list every unit type
       for (const [k, v] of shown) {
         vx = track(k.toUpperCase(), vx, vy + 1, font, 6, muted, 0.06) + 3;
         page.drawText(v, { x: vx, y: vy, size: 11, font: bold, color: green });
@@ -258,7 +259,7 @@ function drawFees(page, fees, { x, y, w, title }) {
   const inner = w - 2 * pad, ax = x + pad, bx = x + pad + inner * split, mw = inner * (1 - split);
   track("ONE-TIME", ax, colTop, bold, 7, orange, 0.14);
   track("MONTHLY", bx, colTop, bold, 7, orange, 0.14);
-  page.drawRectangle({ x: bx - 12, y: y + pad - 2, width: 0.6, height: colTop - y - pad + 8, color: rgb(0.93, 0.80, 0.75) });
+  page.drawRectangle({ x: bx - 12, y: y + pad - 2 + footH, width: 0.6, height: colTop - y - pad + 8 - footH, color: rgb(0.93, 0.80, 0.75) });
   fees.oneTime.forEach((it, i) => item(it, ax, colTop - 12 - i * rowH));
   // monthly: the first item (utilities) gets its own row, the rest share the next row
   const [first, ...rest] = fees.monthly;
@@ -442,9 +443,9 @@ let pdfUrl = null, timer = null;
 
 // fixed house style
 const FOOTER = "325 Waterfront Way, Washougal, WA 98671\n(833) 725-1695  |  liveathyaspoint.com";
-// fees are set by marketing; utilities show only the matching unit type when the name says Studio / 1 Bed / 2 Bed
+// fees are set by marketing
 const FEES = {
-  note: "Pricing is subject to change without notice.",
+  notes: ["Pricing is subject to change without notice.", "Additional monthly costs billed by outside providers are not listed."],
   oneTime: [
     { label: "Application fee", value: "$50", note: "per person, 18+" },
     { label: "Deposit", value: "Up to 1 mo. rent", note: "min. $500" },
