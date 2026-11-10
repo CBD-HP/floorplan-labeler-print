@@ -185,7 +185,7 @@ function winAnsiSafe(font, text) {
   return out;
 }
 
-function drawTracked(page, text, { font, size, y, tracking, pageW, color, maxW }) {
+function drawTracked(page, text, { font, size, y, tracking, pageW, color, maxW, cx }) {
   let t = tracking * size;
   const widthOf = (sz, tr) => {
     let w = 0; for (const ch of text) w += font.widthOfTextAtSize(ch, sz);
@@ -193,7 +193,7 @@ function drawTracked(page, text, { font, size, y, tracking, pageW, color, maxW }
   };
   let w = widthOf(size, t);
   if (w > maxW) { const k = maxW / w; size *= k; t *= k; w = maxW; }   // shrink long names to fit
-  let x = (pageW - w) / 2;
+  let x = (cx !== undefined ? cx * 2 : pageW) / 2 - w / 2;
   for (const ch of text) {
     page.drawText(ch, { x, y, size, font, color });
     x += font.widthOfTextAtSize(ch, size) + t;
@@ -208,13 +208,18 @@ function feesUnitType(title) {
   return m ? m[1] + " Bed" : "";
 }
 let FEE_FONTS = null;
+function feesHeight(fees, w) {
+  const perRow = w < 450 ? 2 : Math.max(1, fees.monthly.length - 1);
+  const rows = Math.max(fees.oneTime.length, fees.monthly.length > 1 ? 1 + Math.ceil((fees.monthly.length - 1) / perRow) : 1);
+  return 14 + 8 + 22 + 12 + (rows - 1) * 27 + 13 + 14 - 2;
+}
 function drawFees(page, fees, { x, y, w, title }) {
   const { font, bold, rgb } = FEE_FONTS;
   const green = rgb(...BRAND.green), orange = rgb(...BRAND.orange);
   const muted = rgb(0.38, 0.45, 0.44), tint = rgb(0.992, 0.949, 0.933);
   const pad = 14, rowH = 27;
-  const rows = Math.max(fees.oneTime.length, fees.monthly.length > 1 ? 2 : 1);
-  const H = pad + 8 + 22 + 12 + (rows - 1) * rowH + 13 + pad - 2, top = y + H;
+  const perRow = w < 450 ? 2 : Math.max(1, fees.monthly.length - 1);
+  const H = feesHeight(fees, w), top = y + H;
   page.drawRectangle({ x, y, width: w, height: H, color: tint });
   page.drawRectangle({ x, y: top - 2, width: w, height: 2, color: orange });
   const track = (t, xx, yy, f, size, color, tr = 0.12) => {
@@ -249,7 +254,8 @@ function drawFees(page, fees, { x, y, w, title }) {
   };
   const colTop = hy - 22;
   // one-time: one column; monthly: two columns
-  const inner = w - 2 * pad, ax = x + pad, bx = x + pad + inner * 0.40, mw = inner * 0.60;
+  const split = w < 450 ? 0.47 : 0.40;   // narrow panel (beside the logo) gives one-time a bit more room
+  const inner = w - 2 * pad, ax = x + pad, bx = x + pad + inner * split, mw = inner * (1 - split);
   track("ONE-TIME", ax, colTop, bold, 7, orange, 0.14);
   track("MONTHLY", bx, colTop, bold, 7, orange, 0.14);
   page.drawRectangle({ x: bx - 12, y: y + pad - 2, width: 0.6, height: colTop - y - pad + 8, color: rgb(0.93, 0.80, 0.75) });
@@ -257,7 +263,7 @@ function drawFees(page, fees, { x, y, w, title }) {
   // monthly: the first item (utilities) gets its own row, the rest share the next row
   const [first, ...rest] = fees.monthly;
   if (first) item(first, bx, colTop - 12);
-  rest.forEach((it, i) => item(it, bx + i * (mw / rest.length), colTop - 12 - rowH));
+  rest.forEach((it, i) => item(it, bx + (i % perRow) * (mw / perRow), colTop - 12 - rowH * (1 + Math.floor(i / perRow))));
   return H;
 }
 
@@ -362,23 +368,32 @@ async function buildPdf(PDFLib, items, opts) {
       top -= 12;
     }
 
-    // contact lines (bottom up), then logo above them
-    let bottom = M;
+    // bottom band: other costs on the left, property logo + contact on the right
+    // (without other costs, the logo + contact sit centered as before)
     const lines = (opts.footer || "").split("\n").map(l => l.trim()).filter(Boolean);
     const fSize = opts.footerSize || 8.5, lead = fSize * 1.55;
     const muted = rgb(BRAND.green[0] * 0.75 + 0.25 * 0.42, BRAND.green[1] * 0.75 + 0.25 * 0.48, BRAND.green[2] * 0.75 + 0.25 * 0.47);
+    const lh = logo ? opts.logoHeight : 0;
+    const blockH = lines.length * lead + (lines.length && logo ? 6 : 0) + lh;
+    let colX = M, colW = pw - 2 * M, bandH = blockH;
+    if (opts.fees) {
+      const fw = (pw - 2 * M) * (landscape ? 0.66 : 0.64);
+      bandH = Math.max(feesHeight(opts.fees, fw), blockH);
+      drawFees(page, opts.fees, { x: M, y: M + bandH - feesHeight(opts.fees, fw), w: fw, title: s.title || "" });
+      colX = M + fw + 16; colW = pw - M - colX;
+    }
+    const cx = colX + colW / 2;
+    let by = M + (bandH - blockH) / 2;               // center the logo block in the band
     for (let i = lines.length - 1; i >= 0; i--) {
-      drawTracked(page, winAnsiSafe(font, lines[i]), { font, size: fSize, y: bottom, tracking: 0.04, pageW: pw, color: muted, maxW: pw - 2 * M });
-      bottom += lead;
+      drawTracked(page, winAnsiSafe(font, lines[i]), { font, size: fSize, y: by, tracking: 0.04, pageW: pw, color: muted, maxW: colW, cx });
+      by += lead;
     }
-    if (lines.length) bottom += 6;
+    if (lines.length) by += 6;
     if (logo) {
-      const lh = opts.logoHeight;
       const lw = lh * (logo.width / logo.height);
-      page.drawImage(logo, { x: (pw - lw) / 2, y: bottom, width: lw, height: lh });
-      bottom += lh;
+      page.drawImage(logo, { x: cx - lw / 2, y: by, width: lw, height: lh });
     }
-    if (opts.fees) bottom += 14 + drawFees(page, opts.fees, { x: M, y: bottom + 14, w: pw - 2 * M, title: s.title || "" });
+    let bottom = M + bandH;
 
     // floor plan, scaled to fit the space between
     const gap = 22;
