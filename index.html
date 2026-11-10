@@ -78,6 +78,7 @@ label.c{display:flex;gap:8px;align-items:center;font-size:14px}
 input[type=range]{accent-color:var(--accent)}
 .clear{align-self:flex-start;color:var(--muted);font-weight:600;font-size:13px}
 .clear.armed{border-color:var(--accent);color:var(--accent)}
+.sub2{font-size:12px;color:var(--muted)}
 .locked{font-size:12px;color:var(--muted);margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px}
 .logo{display:flex;gap:12px;align-items:center}
 .logo img{height:46px;max-width:150px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px}
@@ -132,9 +133,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
 
     <section>
       <h2>Layout</h2>
-      <label class="f">Orientation
-        <select id="orientation"><option value="portrait" selected>Portrait</option><option value="landscape">Landscape</option><option value="auto">Auto (fit plan)</option></select>
-      </label>
       <label class="c"><input type="checkbox" id="showFees" checked> Include other costs (fees and utilities)</label>
       <label class="f">Write-in field, top right (leave blank to hide)
         <input type="text" id="unitLabel" value="Unit #:">
@@ -327,7 +325,8 @@ async function buildPdf(PDFLib, items, opts) {
     let [pw, ph] = PAGE_SIZES[opts.pageSize] || PAGE_SIZES.letter;
     const SIDE_GAP = 28;
     const ratio = s.pieces.reduce((t, p) => t + p.w / p.h, 0);
-    const landscape = opts.orientation === "landscape" || (opts.orientation === "auto" && (s.pieces.length > 1 ? ratio > 1.4 : ratio > 1.1));
+    // a 2D + 3D pair always prints landscape; single plans follow the orientation setting
+    const landscape = s.pieces.length > 1 || opts.orientation === "landscape" || (opts.orientation === "auto" && ratio > 1.1);
     if (landscape) [pw, ph] = [ph, pw];
     const page = doc.addPage([pw, ph]);
 
@@ -467,8 +466,8 @@ function buildingOptions() {
 // upload boxes turn green and list what's been added
 let mode = "single";
 const HINTS = {
-  pair: "Add both for each unit. They print side by side (stacked in portrait). Only have one? It prints centered on the page by itself. PDF, JPG or PNG.",
-  single: "Each floor plan prints centered on its own page, named after its file. PDF, JPG or PNG.",
+  pair: "Add both for each unit. They print side by side on a landscape page. Only have one? It prints centered on a portrait page by itself. PDF, JPG or PNG.",
+  single: "Each floor plan prints centered on its own portrait page, named after its file. PDF, JPG or PNG.",
 };
 const DROP_TEXT = {
   drop2d: ["Step 1", "Add 2D floor plan", "2D added"],
@@ -678,7 +677,7 @@ async function rebuild() {
   if (!files.length) { $("frame").removeAttribute("src"); setStatus("Add a floor plan to see the preview."); return; }
   try {
     const bytes = await buildPdf(PDFLib, files.map(f => ({ title: f.title, building: f.building, unit: f.unit || "", kind: f.kind, bytes: f.bytes, extra: mode === "single" ? null : (f.extra || null) })), {
-      pageSize: "letter", orientation: $("orientation").value,
+      pageSize: "letter", orientation: "portrait",   // single plans print portrait; 2D + 3D pairs always print landscape
       titleSize: STYLE.titleSize, logoHeight: STYLE.logoHeight,
       upper: STYLE.upper, rule: STYLE.rule, logo: logo.on ? logo : null, footer: FOOTER, unitLabel: $("unitLabel").value, buildings: BUILDING_BYTES, fees: $("showFees").checked ? FEES : null });
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
@@ -695,7 +694,7 @@ async function rebuild() {
 }
 
 // names follow the formatting toggles unless you've typed your own
-["orientation", "unitLabel", "showFees"].forEach(id => $(id).addEventListener("input", schedule));
+["unitLabel", "showFees"].forEach(id => $(id).addEventListener("input", schedule));
 
 function wireDrop(boxId, inputId, slot) {
   const box = $(boxId), input = $(inputId);
