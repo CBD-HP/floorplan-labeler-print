@@ -57,7 +57,14 @@ h2{font:500 12px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
 .files{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
 .files li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"name name" "unit ." "note note";gap:6px 8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .files li:last-child{border-bottom:0;padding-bottom:0}
-.files .nm{grid-area:name}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
+.files .nm{grid-area:name}
+.nmwrap{display:flex;flex-direction:column;gap:4px;min-width:0}
+.nmwrap .cap{font-size:12px;color:var(--muted)}
+.nmwrap .field{position:relative;display:block}
+.nmwrap input{padding-right:30px}
+.nmwrap .pen{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;display:flex}
+.nmwrap input:hover{border-color:var(--brand)}
+.nmwrap input:hover+.pen,.nmwrap input:focus+.pen{color:var(--accent)}.files .ux{grid-area:x}.files .un{grid-area:unit}.files .bd{grid-area:bld}.files small{grid-area:note}
 .files input{width:100%;min-width:0}
 .files select{width:100%}
 .files small{grid-column:1/-1;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
@@ -427,8 +434,18 @@ function renderList() {
     un.type = "text"; un.id = "unit-" + i; un.className = "un"; un.placeholder = "Unit # (optional)";
     un.value = f.unit || ""; un.setAttribute("aria-label", "Unit number to print");
     un.oninput = () => { f.unit = un.value; schedule(); };
-    inp.classList.add("nm");
-    li.append(inp, un, sm); ul.append(li);
+    // name field reads as editable: caption, pencil icon, and an edited badge
+    const wrap = document.createElement("label");
+    wrap.className = "nmwrap nm"; wrap.htmlFor = inp.id;
+    const cap = document.createElement("span");
+    cap.className = "cap"; cap.textContent = f.edited ? "Printed name (edited)" : "Printed name \u00b7 click to edit";
+    const pen = document.createElement("span");
+    pen.className = "pen"; pen.setAttribute("aria-hidden", "true");
+    pen.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M11.3 1.7a1.6 1.6 0 0 1 2.3 2.3L5.4 12.2 2 13l.8-3.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+    const field = document.createElement("span"); field.className = "field"; field.append(inp, pen);
+    inp.addEventListener("input", () => { cap.textContent = "Printed name (edited)"; });
+    wrap.append(cap, field);
+    li.append(wrap, un, sm); ul.append(li);
   });
 }
 
