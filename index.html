@@ -557,17 +557,24 @@ function renderList() {
   });
 }
 
+// Images are shrunk to at most 2400px and stored as JPEG on white. PNG floor plans
+// (especially big 3D renders) are very slow to re-embed on every preview rebuild.
+const MAX_IMG = 2400;
 async function toBytes(file) {
   const t = file.type, n = file.name.toLowerCase();
   if (t === "application/pdf" || n.endsWith(".pdf")) return { kind: "pdf", bytes: new Uint8Array(await file.arrayBuffer()) };
-  if (t === "image/jpeg") return { kind: "jpg", bytes: new Uint8Array(await file.arrayBuffer()) };
-  if (t === "image/png") return { kind: "png", bytes: new Uint8Array(await file.arrayBuffer()) };
-  // other image types (webp, gif, bmp...): convert to PNG
   const url = URL.createObjectURL(file);
-  const img = await new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = url; });
-  const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
-  c.getContext("2d").drawImage(img, 0, 0); URL.revokeObjectURL(url);
-  return { kind: "png", bytes: dataToBytes(c.toDataURL("image/png")) };
+  try {
+    const img = await new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = url; });
+    const s = Math.min(1, MAX_IMG / Math.max(img.naturalWidth, img.naturalHeight));
+    if (t === "image/jpeg" && s === 1) return { kind: "jpg", bytes: new Uint8Array(await file.arrayBuffer()) };
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return { kind: "jpg", bytes: dataToBytes(c.toDataURL("image/jpeg", 0.92)) };
+  } finally { URL.revokeObjectURL(url); }
 }
 
 const DIM = /(^|[\s_\-.(])([23]d)(?=$|[\s_\-.)])/i;
@@ -671,7 +678,17 @@ function setMode(m) {
 document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", () => r.checked && setMode(r.value)));
 
 function setStatus(t) { $("status").textContent = t; }
-function schedule() { clearTimeout(timer); timer = setTimeout(rebuild, 200); }
+// Wait for a short pause in typing, and never run two rebuilds at once.
+let building = false, again = false;
+function schedule() { clearTimeout(timer); timer = setTimeout(runRebuild, 400); }
+async function runRebuild() {
+  if (building) { again = true; return; }
+  building = true;
+  try { await rebuild(); } finally {
+    building = false;
+    if (again) { again = false; runRebuild(); }
+  }
+}
 
 async function rebuild() {
   if (!files.length) { $("frame").removeAttribute("src"); setStatus("Add a floor plan to see the preview."); return; }
