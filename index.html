@@ -134,9 +134,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,.drop:focus-visibl
     <section>
       <h2>Layout</h2>
       <label class="c"><input type="checkbox" id="showFees" checked> Include other costs (fees and utilities)</label>
-      <label class="f">Write-in field, top right (set by marketing)
-        <input type="text" id="unitLabel" value="Unit #:" readonly aria-readonly="true" style="background:#EEF0F2;color:#5F6670;cursor:not-allowed">
-      </label>
+      <!-- Write-in label is set by marketing and hidden from leasing. It still prints. -->
+      <input type="hidden" id="unitLabel" value="Unit #:">
     </section>
 
     <p class="locked">Need a change, found an error, or having an issue? Contact the marketing team for updates to the Floor Plan Labeler.</p>
